@@ -1,0 +1,582 @@
+---
+title: "project"
+output: html_document
+date: "2025-10-21"
+author: 'Spencer Thompson'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Set Up
+
+```{r}
+library(tidyverse)
+library(patchwork)
+library(caret)
+library(e1071)
+library(gt)
+
+options(scipen = 999)
+
+df <- read_csv('CaseStudy1-data.csv', show_col_types = F)
+```
+
+# Data Cleaning
+
+```{r}
+df <- df %>%
+  mutate(
+    BusinessTravel_num = recode(BusinessTravel,
+                                    "Non-Travel" = 1,
+                                    "Travel_Rarely" = 2,
+                                    "Travel_Frequently" = 3),
+    Department_num = recode(Department,
+                                    "Human Resources" = 1,
+                                    "Research & Development" = 2,
+                                    "Sales" = 3),
+    EducationField_num = as.numeric(as.factor(EducationField)),
+    Gender_num = as.numeric(as.factor(Gender)),
+    JobRole_num = as.numeric(as.factor(JobRole)),
+    MaritalStatus_num = as.numeric(as.factor(MaritalStatus)),
+    Over18_num = as.numeric(as.factor(Over18)),
+    OverTime_num = as.numeric(as.factor(OverTime)),
+    isDirector = ifelse(str_detect(tolower(JobRole), "director"), 1, 0),
+    isExecutive = ifelse(str_detect(tolower(JobRole), "executive"), 1, 0))
+   
+
+df_num <- df %>%
+  select(-BusinessTravel, -Department, -EducationField, -Gender, -JobRole, -MaritalStatus, -Over18, -OverTime)
+```
+
+## Attrition Overall
+
+```{r}
+df %>%
+  count(Attrition) %>%
+  mutate(
+    Percentage = n / sum(n) * 100,
+    Percentage = paste0(round(Percentage, 1), "%")) %>%
+  rename(
+    `Yes/No` = Attrition,
+    Count = n)
+```
+
+# Viz
+
+## Attrition by Variable
+
+```{r}
+attrition <- df %>%
+  filter(Attrition == 'Yes')
+
+non_attrition <- df %>%
+  filter(Attrition == "No")
+```
+
+## Distribution
+
+### Age
+
+```{r}
+att <- ggplot(attrition, aes(x = Age)) +
+  geom_histogram(binwidth = 5, fill = "orange", color = "black") +
+  scale_x_continuous(breaks = seq(18, 60, by = 5), limits = c(17, 61)) +
+  labs(title = "Distribution of Age for Attrited Employees",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+non <- ggplot(non_attrition, aes(x = Age)) +
+  geom_histogram(binwidth = 5, fill = "lightblue", color = "black") +
+  scale_x_continuous(breaks = seq(18, 60, by = 5), limits = c(17, 61)) +
+  labs(title = "Distribution of Age for Non-Attrited Employees",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+age <- att / non
+age
+```
+
+### Business Travel
+
+```{r}
+att <- ggplot(attrition, aes(x = BusinessTravel_num)) +
+  geom_histogram(binwidth = 1, fill = "orange", color = "black") +
+  scale_x_continuous(breaks = seq(0, 4, by = 1), limits = c(0, 5)) +
+  labs(title = "Distribution of BusinessTravel for Attrited Employees",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+non <- ggplot(non_attrition, aes(x = BusinessTravel_num)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +
+  scale_x_continuous(breaks = seq(0, 4, by = 1), limits = c(0, 5)) +
+  labs(title = "Distribution of BusinessTravel for Non-Attrited Employees",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+bt <- att / non
+bt
+```
+
+### Daily Rate
+
+```{r}
+min <- min(df$DailyRate)
+max <- max(df$DailyRate)
+bin <- round((max - min) / 8, 0)
+
+att <- ggplot(attrition, aes(x = DailyRate)) +
+  geom_density(fill = "orange", color = "black", alpha = 0.7) +
+  scale_x_continuous(breaks = seq(round(min, 0), round(max, 0), by = bin), 
+                     limits = c(min, max)) +
+  labs(title = "Distribution of DailyRate for Attrited Employees",
+       x = "DailyRate",
+       y = "Density") +
+  theme_minimal()
+
+non <- ggplot(non_attrition, aes(x = DailyRate)) +
+  geom_density(fill = "lightblue", color = "black", alpha = 0.7) +
+  scale_x_continuous(breaks = seq(round(min, 0), round(max, 0), by = bin), 
+                     limits = c(min, max)) +
+  labs(title = "Distribution of DailyRate for Non-Attrited Employees",
+       x = "DailyRate",
+       y = "Density") +
+  theme_minimal()
+
+dr <- att / non
+dr
+```
+
+### Department
+
+```{r}
+min <- min(df$Department_num)
+max <- max(df$Department_num)
+bin <- 1
+
+att <- ggplot(attrition, aes(x = Department_num)) +
+  geom_histogram(binwidth = bin, fill = "orange", color = "black") +
+  scale_x_continuous(breaks = seq(round(min, 0), round(max, 0), by = bin), 
+                     limits = c(min - 1, max + 1)) +
+  labs(title = "Distribution of Department for Attrited Employees",
+       x = "Department",
+       y = "Density") +
+  theme_minimal()
+
+non <- ggplot(non_attrition, aes(x = Department_num)) +
+  geom_histogram(binwidth = bin, fill = "lightblue", color = "black") +
+  scale_x_continuous(breaks = seq(round(min, 0), round(max, 0), by = bin), 
+                     limits = c(min - 1, max + 1)) +
+  labs(title = "Distribution of Department for Non-Attrited Employees",
+       x = "Department",
+       y = "Density") +
+  theme_minimal()
+
+dpt <- att / non
+dpt
+```
+
+Environment Satisfaction by Department
+
+```{r}
+hr <- ggplot(df %>% filter(Department == 'Human Resources'), aes(x = EnvironmentSatisfaction)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +
+  labs(title = "Distribution of EnvironmentSatisfaction for HR Dept",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+rd <- ggplot(df %>% filter(Department == 'Research & Development'), aes(x = EnvironmentSatisfaction)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +
+  labs(title = "Distribution of EnvironmentSatisfaction for R&D Dept",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+sales <- ggplot(df %>% filter(Department == 'Sales'), aes(x = EnvironmentSatisfaction)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +
+  labs(title = "Distribution of EnvironmentSatisfaction for Sales Dept",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+fin <- hr / rd / sales
+fin
+```
+
+## Scatterplot
+
+### Daily Rate vs Job Satisfaction
+
+```{r}
+ggplot(df, aes(x = DailyRate, y = JobSatisfaction)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  labs(title = "Job Satisfaction by Daily Rate",
+       x = "Daily Rate",
+       y = "Job Satisfaction") +
+  theme_minimal()
+```
+
+### Job Involvement vs Job Satisfaction
+
+```{r}
+ggplot(df, aes(x = JobInvolvement * 0.25, y = JobSatisfaction * 0.25)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  labs(title = "Job Satisfaction by Job Involvement",
+       x = "Job Involvement",
+       y = "Job Satisfaction") +
+  theme_minimal()
+```
+
+## Tests
+
+### Two Sample T Test of Means (left vs stayed, mean = work life balance)
+
+```{r}
+t_test_result <- t.test(JobSatisfaction ~ OverTime, data = df)
+print(t_test_result)
+
+group_means <- aggregate(JobSatisfaction ~ OverTime, data = df, FUN = mean)
+print(group_means)
+
+group_sds <- aggregate(JobSatisfaction ~ OverTime, data = df, FUN = sd)
+print(group_sds)
+
+group_ns <- table(df$OverTime)
+print(group_ns)
+```
+
+### Two Sample T Test of Means (left vs stayed, mean = miles traveled/commuted)
+
+```{r}
+t_test_result <- t.test(DistanceFromHome ~ Attrition, data = df)
+print(t_test_result)
+
+group_means <- aggregate(DistanceFromHome ~ Attrition, data = df, FUN = mean)
+print(group_means)
+
+group_sds <- aggregate(DistanceFromHome ~ Attrition, data = df, FUN = sd)
+print(group_sds)
+
+group_ns <- table(df$Attrition)
+print(group_ns)
+```
+
+### Kruskal-Wallis Test
+
+```{r}
+kruskal.test(WorkLifeBalance ~ BusinessTravel, data = df)
+```
+
+### ANOVA of Relationship Satisfaction by MaritalStatus
+
+```{r}
+anova_result <- aov(RelationshipSatisfaction ~ MaritalStatus, data = df)
+summary(anova_result)
+```
+
+# Models
+
+## Test/Train Split
+
+```{r}
+df_num <- df_num %>%
+  mutate(target = ifelse(Attrition == "Yes", 1, 0)) %>%
+  select(-Attrition, -Over18_num, -EmployeeCount, -EmployeeNumber, -StandardHours)
+
+set.seed(123)
+
+train_index <- createDataPartition(df_num$target, p = 0.7, list = FALSE)
+train_data <- df_num[train_index, ]
+test_data <- df_num[-train_index, ]
+
+metrics_df <- data.frame()
+
+intervention_cost <- 200
+replacement_percentage <- 0.5
+```
+
+## Logistic Regression
+
+```{r}
+model <- glm(target ~ ., 
+             data = df_num, 
+             family = binomial(link = "logit"))
+summary(model)
+
+test_data$predicted_prob <- predict(model, newdata = test_data, type = "response")
+test_data$predicted_class <- ifelse(test_data$predicted_prob > 0.5, 1, 0)
+test_data$replacement_cost <- test_data$MonthlyRate * 12 * replacement_percentage
+test_data$replacement_cost <- ifelse(test_data$predicted_class == 0 & test_data$target == 1, 
+                                      test_data$MonthlyRate * 12 * replacement_percentage, 0)
+
+cm <- table(Predicted = test_data$predicted_class, Actual = test_data$target)
+print(cm)
+
+TP <- cm[2, 2]
+TN <- cm[1, 1]
+FP <- cm[2, 1]
+FN <- cm[1, 2]
+
+accuracy <- (TP + TN) / sum(cm)
+sensitivity <- TP / (TP + FN)  
+specificity <- TN / (TN + FP) 
+
+total_interventions <- TP + FP
+intervention_expenditure <- total_interventions * intervention_cost
+total_replacement_cost <- sum(test_data$replacement_cost)
+
+total_expenditure <- intervention_expenditure + total_replacement_cost
+
+cat("\n=== Logistic Regression Performance Metrics ===\n")
+cat("Accuracy:    ", round(accuracy, 4), "\n")
+cat("Sensitivity: ", round(sensitivity, 4), "\n")
+cat("Specificity: ", round(specificity, 4), "\n")
+
+metrics_df <- rbind(metrics_df, data.frame(
+  model_name = "Logistic Regression",
+  n = TP + TN + FP + FN,
+  TP = TP,
+  TN = TN,
+  FP = FP,
+  FN = FN,
+  accuracy = round(accuracy, 4),
+  sensitivity = round(sensitivity, 4),
+  specificity = round(specificity, 4),
+  intervention_cost = intervention_expenditure,
+  replacement_cost = round(total_replacement_cost, 2),
+  total_expenditure = round(total_expenditure, 2)
+))
+```
+
+## KNN
+
+```{r}
+train_data$target <- factor(train_data$target, levels = c(0, 1))
+test_data$target <- factor(test_data$target, levels = c(0, 1))
+knn_model <- train(target ~ .,
+                   data = train_data,
+                   method = "knn",
+                   preProcess = c("center", "scale"),
+                   tuneLength = 10, 
+                   trControl = trainControl(method = "cv", number = 5))
+print(knn_model)
+knn_pred <- predict(knn_model, newdata = test_data)
+test_data$replacement_cost <- test_data$MonthlyRate * 12 * replacement_percentage
+test_data$replacement_cost <- ifelse(knn_pred == 0 & test_data$target == 1, 
+                                      test_data$MonthlyRate * 12 * replacement_percentage, 0)
+cm <- confusionMatrix(knn_pred, test_data$target, positive = "1")
+print(cm)
+
+TP <- cm$table[2, 2]
+TN <- cm$table[1, 1]
+FP <- cm$table[2, 1]
+FN <- cm$table[1, 2]
+accuracy <- cm$overall['Accuracy']
+sensitivity <- cm$byClass['Sensitivity']
+specificity <- cm$byClass['Specificity']
+
+total_interventions <- TP + FP
+intervention_expenditure <- total_interventions * intervention_cost
+total_replacement_cost <- sum(test_data$replacement_cost)
+
+total_expenditure <- intervention_expenditure + total_replacement_cost
+
+cat("\n=== kNN Performance Metrics ===\n")
+cat("Accuracy:    ", round(accuracy, 4), "\n")
+cat("Sensitivity: ", round(sensitivity, 4), "\n")
+cat("Specificity: ", round(specificity, 4), "\n")
+
+metrics_df <- rbind(metrics_df, data.frame(
+  model_name = "kNN",
+  n = TP + TN + FP + FN,
+  TP = TP,
+  TN = TN,
+  FP = FP,
+  FN = FN,
+  accuracy = round(accuracy, 4),
+  sensitivity = round(sensitivity, 4),
+  specificity = round(specificity, 4),
+  intervention_cost = intervention_expenditure,
+  replacement_cost = round(total_replacement_cost, 2),
+  total_expenditure = round(total_expenditure, 2)
+))
+```
+
+## Naive Bayes
+
+```{r}
+nb_model <- naiveBayes(target ~ ., data = train_data)
+predictions <- predict(nb_model, test_data)
+test_data$replacement_cost <- test_data$MonthlyRate * 12 * replacement_percentage
+test_data$replacement_cost <- ifelse(predictions == 0 & test_data$target == 1, 
+                                      test_data$MonthlyRate * 12 * replacement_percentage, 0)
+cm <- table(Predicted = predictions, Actual = test_data$target)
+print(cm)
+TP <- cm[2, 2]
+TN <- cm[1, 1]
+FP <- cm[2, 1]
+FN <- cm[1, 2]
+accuracy <- (TP + TN) / sum(cm)
+sensitivity <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+
+total_interventions <- TP + FP
+intervention_expenditure <- total_interventions * intervention_cost
+
+total_replacement_cost <- sum(test_data$replacement_cost)
+
+total_expenditure <- intervention_expenditure + total_replacement_cost
+
+cat("\n=== Naive Bayes Performance Metrics ===\n")
+cat("Accuracy:    ", round(accuracy, 4), "\n")
+cat("Sensitivity: ", round(sensitivity, 4), "\n")
+cat("Specificity: ", round(specificity, 4), "\n")
+
+metrics_df <- rbind(metrics_df, data.frame(
+  model_name = "Naive Bayes",
+  n = TP + TN + FP + FN,
+  TP = TP,
+  TN = TN,
+  FP = FP,
+  FN = FN,
+  accuracy = round(accuracy, 4),
+  sensitivity = round(sensitivity, 4),
+  specificity = round(specificity, 4),
+  intervention_cost = intervention_expenditure,
+  replacement_cost = round(total_replacement_cost, 2),
+  total_expenditure = round(total_expenditure, 2)
+))
+```
+
+## Model Comparison and Costs
+
+```{r}
+print(metrics_df %>% select(model_name, accuracy, sensitivity, specificity, intervention_cost, replacement_cost, total_expenditure))
+
+metrics_df %>%
+  select(model_name, intervention_cost, replacement_cost, total_expenditure) %>%
+  gt() %>%
+  tab_header(
+    title = "Model Cost Comparison",
+  ) %>%
+  cols_label(
+    model_name = "Model",
+    intervention_cost = "Intervention Cost",
+    replacement_cost = "Replacement Cost",
+    total_expenditure = "Total Expenditure"
+  ) %>%
+  fmt_number(
+    columns = c(intervention_cost, replacement_cost, total_expenditure),
+    decimals = 0,
+    use_seps = TRUE
+  )
+```
+
+```{r}
+comp <- read_csv("CaseStudy1CompSet No Attrition.csv", show_col_types = F)
+
+# Apply the same preprocessing as training data
+comp <- comp %>%
+  mutate(
+    BusinessTravel_num = recode(BusinessTravel,
+                                "Non-Travel" = 1,
+                                "Travel_Rarely" = 2,
+                                "Travel_Frequently" = 3),
+    Department_num = recode(Department,
+                            "Human Resources" = 1,
+                            "Research & Development" = 2,
+                            "Sales" = 3),
+    EducationField_num = as.numeric(as.factor(EducationField)),
+    Gender_num = as.numeric(as.factor(Gender)),
+    JobRole_num = as.numeric(as.factor(JobRole)),
+    MaritalStatus_num = as.numeric(as.factor(MaritalStatus)),
+    Over18_num = as.numeric(as.factor(Over18)),
+    OverTime_num = as.numeric(as.factor(OverTime)),
+    isDirector = ifelse(str_detect(tolower(JobRole), "director"), 1, 0),
+    isExecutive = ifelse(str_detect(tolower(JobRole), "executive"), 1, 0))
+
+# Keep ID for submission
+comp_ids <- comp %>% select(ID)
+
+# Create numeric dataset matching the training data structure
+comp_num <- comp %>%
+  select(-BusinessTravel, -Department, -EducationField, -Gender, -JobRole, 
+         -MaritalStatus, -Over18, -OverTime, -Over18_num, -EmployeeCount, 
+         -EmployeeNumber, -StandardHours, -ID)
+
+# Make predictions using the Naive Bayes model
+comp_predictions <- predict(nb_model, comp_num)
+
+# Create submission dataframe
+submission <- data.frame(
+  ID = comp_ids$ID,
+  Attrition = ifelse(comp_predictions == 1, "Yes", "No")
+)
+
+# Display first few predictions
+head(submission, 10)
+
+# Save predictions to CSV
+write_csv(submission, "Case2PredictionsThompson Attrition.csv")
+
+# Summary of predictions
+table(submission$Attrition)
+```
+
+# Stuff
+
+**Top 3 predictors by z-score:**
+
+1.  OverTime_num (z = 7.499)
+
+2.  JobInvolvement (z = -5.046)
+
+3.  JobSatisfaction (z = -4.554)
+
+**Tiered list by significance level:**
+
+\*\*\*\*\* (p \< 0.001):\*\*
+
+1.  OverTime_num (z = 7.499)
+
+2.  JobInvolvement (z = -5.046)
+
+3.  JobSatisfaction (z = -4.554)
+
+4.  NumCompaniesWorked (z = 4.234)
+
+5.  YearsSinceLastPromotion (z = 4.037)
+
+\*\*\* (p \< 0.01):\*\*
+
+1.  BusinessTravel_num (z = 3.571)
+
+2.  DistanceFromHome (z = 3.361)
+
+3.  isDirector (z = -2.997)
+
+4.  WorkLifeBalance (z = -2.973)
+
+5.  TrainingTimesLastYear (z = -2.726)
+
+6.  EnvironmentSatisfaction (z = -2.714)
+
+\*\* (p \< 0.05):\*\*
+
+1.  MaritalStatus_num (z = 3.416)
+
+2.  TotalWorkingYears (z = -2.554)
+
+3.  YearsWithCurrManager (z = -2.301)
+
+4.  RelationshipSatisfaction (z = -2.214)
+
+5.  YearsInCurrentRole (z = -2.102)
